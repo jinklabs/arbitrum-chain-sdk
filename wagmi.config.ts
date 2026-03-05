@@ -18,6 +18,7 @@ import {
   chains,
 } from './src/chains';
 import { getImplementation } from './src/utils/getImplementation';
+import { getArbOSVersion } from './src/utils/getArbOSVersion';
 
 dotenv.config();
 
@@ -285,6 +286,14 @@ export default async function () {
     },
   ];
 
+  const referenceChain = arbitrumSepolia;
+  const referenceChainClient = createPublicClient({ chain: referenceChain, transport: http() });
+  const referenceChainArbOSVersion = await getArbOSVersion(referenceChainClient);
+
+  console.log(
+    `- Using ${referenceChain.name} (${referenceChain.id}) running ArbOS ${referenceChainArbOSVersion} as reference\n`,
+  );
+
   for (const contract of contracts) {
     await assertContractAbisMatch(contract);
     await updateContractWithImplementationIfProxy(contract);
@@ -299,7 +308,7 @@ export default async function () {
       out: `src/contracts/${filePath}.ts`,
       plugins: [
         etherscan({
-          chainId: arbitrumSepolia.id,
+          chainId: referenceChain.id,
           apiKey,
           // todo: fix viem type issue
           contracts: [contract],
