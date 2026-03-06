@@ -262,13 +262,16 @@ export async function assertContractAbisMatch(contract: ContractConfig) {
 
 async function updateContractWithImplementationIfProxy(contract: ContractConfig) {
   // precompiles, do nothing
-  if (typeof contract.address === 'string') {
+  if (contract.name.startsWith('Arb')) {
     return;
   }
 
   const implementation = await getImplementation({
     client: createPublicClient({ chain: arbitrumSepolia, transport: http() }),
-    address: contract.address[arbitrumSepolia.id],
+    address:
+      typeof contract.address === 'string'
+        ? contract.address
+        : contract.address[arbitrumSepolia.id],
   });
 
   // not a proxy, do nothing
