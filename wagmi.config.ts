@@ -217,13 +217,15 @@ function allEqual<T>(array: T[]) {
 }
 
 export async function assertContractAbisMatch(contract: ContractConfig) {
+  const contractVersion = contract.version ? ` v${contract.version}` : '';
+
   // skip check when single address is provided
   if (typeof contract.address === 'string') {
-    console.log(`- ${contract.name} ✔\n`);
+    console.log(`- ${contract.name}${contractVersion} ✔\n`);
     return;
   }
 
-  console.log(`- ${contract.name}${contract.version ? ` v${contract.version}` : ''}`);
+  console.log(`- ${contract.name}${contractVersion}`);
 
   const abiHashes = await Promise.all(
     Object.entries(contract.address)
@@ -255,7 +257,7 @@ export async function assertContractAbisMatch(contract: ContractConfig) {
     throw new Error(`- ${contract.name}`);
   }
 
-  console.log(`- ${contract.name}${contract.version ? ` v${contract.version}` : ''} ✔\n`);
+  console.log(`- ${contract.name}${contractVersion} ✔\n`);
 }
 
 async function updateContractWithImplementationIfProxy(contract: ContractConfig) {
