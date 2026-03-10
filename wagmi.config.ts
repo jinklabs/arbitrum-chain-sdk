@@ -1,5 +1,6 @@
-import { Config } from '@wagmi/cli';
+import { Config, Plugin } from '@wagmi/cli';
 import { erc, etherscan } from '@wagmi/cli/plugins';
+import { Abi } from 'abitype';
 import { hashMessage, createPublicClient, http, zeroAddress } from 'viem';
 import dotenv from 'dotenv';
 
@@ -195,6 +196,27 @@ const contracts: ContractConfig[] = [
     },
   },
   {
+    name: 'Rollup',
+    version: '1.1',
+    // example deployment via factory
+    // https://sepolia.arbiscan.io/tx/0xb2df7e9658eceb2c94567ad537a34892e093ce06f3d4234a9899b4315167cb71
+    address: '0xDCb63cfb74EE8F66c6188EdCB886B10FF0B7a75a',
+  },
+  {
+    name: 'Rollup',
+    version: '2.1',
+    // example deployment via factory
+    // https://sepolia.arbiscan.io/tx/0x72d481d03556fb831b505cf7d9695bd7da96fce2c4a282868be0384d580e6902
+    address: '0xF847994AC56799D7dE2F5e51B9E5d1d001cAc3c3',
+  },
+  {
+    name: 'Rollup',
+    version: '3.1',
+    // example deployment via factory
+    // https://sepolia.arbiscan.io/tx/0x20c5ef96d3d30c252ce9e6b76b25ffcbb44dfc2564d9e17179ecceef09272ee2
+    address: '0x07F6Fa22Bf5F3AFbcE2594396F2B943c5720F40d',
+  },
+  {
     name: 'SequencerInbox',
     version: '1.1',
     // example deployment via factory
@@ -304,6 +326,46 @@ async function updateContractWithImplementationIfProxy(contract: ContractConfig)
   contract.implementation = { [arbitrumSepolia.id]: implementation };
 }
 
+/**
+ * Custom wagmi plugin that generates a combined ABI for Rollup contracts.
+ *
+ * Rollup contracts use an extension of OZ's ERC1967Upgrade that supports two
+ * logic contracts (RollupAdminLogic and RollupUserLogic). This plugin fetches
+ * ABIs for both implementations and merges them into a single ABI, deduplicating
+ * entries using JSON.stringify (relies on consistent key ordering from the same API source).
+ */
+function rollupAbi({
+  name,
+  chainId,
+  address,
+}: {
+  name: string;
+  chainId: ParentChainId;
+  address: `0x${string}`;
+}): Plugin {
+  return {
+    name: 'Rollup ABI',
+    async contracts() {
+      const client = createPublicClient({
+        chain: chains.find((chain) => chain.id === chainId),
+        transport: http(),
+      });
+
+      const adminLogicAddress = await getImplementation({ client, address });
+      const adminLogicAbi: Abi = await fetchAbi(chainId, adminLogicAddress);
+
+      const userLogicAddress = await getImplementation({ client, address, secondary: true });
+      const userLogicAbi: Abi = await fetchAbi(chainId, userLogicAddress);
+
+      // merge and deduplicate
+      const common = new Set(adminLogicAbi.map((entry) => JSON.stringify(entry)));
+      const userLogicAbiOnly = userLogicAbi.filter((entry) => !common.has(JSON.stringify(entry)));
+
+      return [{ name, abi: [...adminLogicAbi, ...userLogicAbiOnly] }];
+    },
+  };
+}
+
 export default async function () {
   const configs: Config[] = [
     {
@@ -322,7 +384,6 @@ export default async function () {
 
   for (const contract of contracts) {
     await assertContractAbisMatch(contract);
-    await updateContractWithImplementationIfProxy(contract);
     await sleep(1_000); // sleep to avoid rate limiting
 
     const filePath =
@@ -330,18 +391,35 @@ export default async function () {
         ? `${contract.name}/v${contract.version}`
         : contract.name;
 
-    configs.push({
-      out: `src/contracts/${filePath}.ts`,
-      plugins: [
-        etherscan({
-          chainId: referenceChain.id,
-          apiKey,
-          // todo: fix viem type issue
-          contracts: [contract],
-          cacheDuration: 0,
-        }),
-      ],
-    });
+    if (contract.name === 'Rollup') {
+      configs.push({
+        out: `src/contracts/${filePath}.ts`,
+        plugins: [
+          rollupAbi({
+            name: contract.name,
+            chainId: referenceChain.id,
+            address: (typeof contract.address === 'string'
+              ? contract.address
+              : contract.address[referenceChain.id]) as `0x${string}`,
+          }),
+        ],
+      });
+    } else {
+      await updateContractWithImplementationIfProxy(contract);
+
+      configs.push({
+        out: `src/contracts/${filePath}.ts`,
+        plugins: [
+          etherscan({
+            chainId: referenceChain.id,
+            apiKey,
+            // todo: fix viem type issue
+            contracts: [contract],
+            cacheDuration: 0,
+          }),
+        ],
+      });
+    }
   }
 
   return configs;
