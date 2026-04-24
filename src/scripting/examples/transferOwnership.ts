@@ -9,7 +9,6 @@ import {
   toHex,
   zeroAddress,
 } from 'viem';
-import { runScript } from '../scriptUtils';
 import { addressSchema, bigintSchema, privateKeySchema } from '../schemas/common';
 import { toPublicClient, toAccount, toWalletClient, findChain } from '../viemTransforms';
 import { upgradeExecutorPrepareAddExecutorTransactionRequest } from '../../upgradeExecutorPrepareAddExecutorTransactionRequest';
@@ -164,7 +163,7 @@ async function sendL2Message(
   return txHash;
 }
 
-const schema = z
+export const schema = z
   .object({
     rpcUrl: z.url(),
     chainId: z.number(),
@@ -187,7 +186,7 @@ const schema = z
     newOwnerAddress,
   }));
 
-runScript(schema, async (input) => {
+export const execute = async (input: z.output<typeof schema>) => {
   const {
     publicClient,
     account,
@@ -277,4 +276,4 @@ runScript(schema, async (input) => {
     step5TxHash,
     step6TxHash,
   };
-});
+};
